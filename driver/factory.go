@@ -11,10 +11,11 @@ import (
 )
 
 type options struct {
-	forcedValues map[string]interface{}
-	preload      bool
-	validate     bool
-	opts         []configx.OptionModifier
+	forcedValues    map[string]interface{}
+	preload         bool
+	validate        bool
+	opts            []configx.OptionModifier
+	skipNetworkInit bool
 }
 
 func newOptions() *options {
@@ -51,6 +52,12 @@ func DisablePreloading() OptionsModifier {
 	}
 }
 
+func SkipNetworkInit() OptionsModifier {
+	return func(o *options) {
+		o.skipNetworkInit = true
+	}
+}
+
 func New(ctx context.Context, opts ...OptionsModifier) Registry {
 	o := newOptions()
 	for _, f := range opts {
@@ -72,7 +79,7 @@ func New(ctx context.Context, opts ...OptionsModifier) Registry {
 		l.WithError(err).Fatal("Unable to create service registry.")
 	}
 
-	if err = r.Init(ctx); err != nil {
+	if err = r.Init(ctx, o.skipNetworkInit); err != nil {
 		l.WithError(err).Fatal("Unable to initialize service registry.")
 	}
 

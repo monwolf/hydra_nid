@@ -2,6 +2,7 @@ package client_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -38,6 +39,7 @@ func newResponseSnapshot(body string, res *http.Response) *responseSnapshot {
 }
 
 func TestHandler(t *testing.T) {
+	ctx := context.TODO()
 	reg := internal.NewMockedRegistry(t)
 	h := client.NewHandler(reg)
 
@@ -59,7 +61,7 @@ func TestHandler(t *testing.T) {
 				require.NoError(t, err)
 
 				hadSecret := len(tc.c.Secret) > 0
-				c, err := h.CreateClient(r, func(c *client.Client) error {
+				c, err := h.CreateClient(r, func(ctx context.Context, c *client.Client) error {
 					return nil
 				}, tc.dynamic)
 				require.NoError(t, err)
@@ -74,7 +76,7 @@ func TestHandler(t *testing.T) {
 
 				if tc.dynamic {
 					require.NotEmpty(t, c.OutfacingID)
-					assert.Equal(t, reg.Config().PublicURL().String()+"oauth2/register/"+c.OutfacingID, c.RegistrationClientURI)
+					assert.Equal(t, reg.Config(ctx).PublicURL().String()+"oauth2/register/"+c.OutfacingID, c.RegistrationClientURI)
 					except = append(except, "client_id", "client_secret", "registration_client_uri")
 				}
 
@@ -86,7 +88,7 @@ func TestHandler(t *testing.T) {
 	t.Run("dynamic client registration protocol authentication", func(t *testing.T) {
 		r, err := http.NewRequest("POST", "/openid/registration", bytes.NewBufferString("{}"))
 		require.NoError(t, err)
-		expected, err := h.CreateClient(r, func(c *client.Client) error {
+		expected, err := h.CreateClient(r, func(ctx context.Context, c *client.Client) error {
 			return nil
 		}, true)
 		require.NoError(t, err)
@@ -115,9 +117,9 @@ func TestHandler(t *testing.T) {
 	})
 
 	newServer := func(t *testing.T, dynamicEnabled bool) (*httptest.Server, *http.Client) {
-		require.NoError(t, reg.Config().Set(config.KeyPublicAllowDynamicRegistration, dynamicEnabled))
+		require.NoError(t, reg.Config(ctx).Set(config.KeyPublicAllowDynamicRegistration, dynamicEnabled))
 		router := httprouter.New()
-		h.SetRoutes(&x.RouterAdmin{Router: router}, &x.RouterPublic{Router: router})
+		h.SetRoutes(ctx, &x.RouterAdmin{Router: router}, &x.RouterPublic{Router: router})
 		ts := httptest.NewServer(router)
 		t.Cleanup(ts.Close)
 		return ts, ts.Client()

@@ -24,6 +24,7 @@ import (
 )
 
 func TestManagers(t *testing.T) {
+	ctx := context.TODO()
 	registries := map[string]driver.Registry{
 		"memory": internal.NewRegistryMemory(t, internal.NewConfigurationWithDefaults()),
 	}
@@ -46,7 +47,7 @@ func TestManagers(t *testing.T) {
 
 		t.Run("package=consent/manager="+k, consent.ManagerTests(m.ConsentManager(), m.ClientManager(), m.OAuth2Storage()))
 
-		t.Run("package=consent/janitor="+k, testhelpers.JanitorTests(m.Config(), m.ConsentManager(), m.ClientManager(), m.OAuth2Storage()))
+		t.Run("package=consent/janitor="+k, testhelpers.JanitorTests(m.Config(ctx), m.ConsentManager(), m.ClientManager(), m.OAuth2Storage()))
 
 		t.Run("package=jwk/manager="+k, func(t *testing.T) {
 			keyGenerators := new(driver.RegistryBase).KeyGenerators()
@@ -62,13 +63,13 @@ func TestManagers(t *testing.T) {
 				{keyGenerator: keyGenerators["ES512"], alg: "ES512", skip: false},
 				{keyGenerator: keyGenerators["HS256"], alg: "HS256", skip: true},
 				{keyGenerator: keyGenerators["HS512"], alg: "HS512", skip: true},
-				{keyGenerator: keyGenerators["EdDSA"], alg: "EdDSA", skip: m.Config().HsmEnabled()},
+				{keyGenerator: keyGenerators["EdDSA"], alg: "EdDSA", skip: m.Config(ctx).HsmEnabled()},
 			} {
 				t.Run("key_generator="+tc.alg, func(t *testing.T) {
 					if tc.skip {
 						t.Skipf("Skipping test. Not applicable for alg: %s", tc.alg)
 					}
-					if m.Config().HsmEnabled() {
+					if m.Config(ctx).HsmEnabled() {
 						t.Run("TestManagerGenerateAndPersistKeySet", jwk.TestHelperManagerGenerateAndPersistKeySet(m.KeyManager(), tc.alg))
 					} else {
 						kid := uuid.New()

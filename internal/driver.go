@@ -72,7 +72,8 @@ func newRegistryDefault(t *testing.T, url string, c *config.Provider) driver.Reg
 
 	require.NoError(t, err)
 
-	require.NoError(t, r.Init(context.Background()))
+	// This call seems to be redundant because init is called in NewRegistryFromDSN
+	// require.NoError(t, r.Init(context.Background(), false))
 	return r
 }
 

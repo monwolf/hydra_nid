@@ -67,6 +67,7 @@ func setupRegistries(t *testing.T) {
 }
 
 func TestManagers(t *testing.T) {
+	ctx := context.TODO()
 	tests := []struct {
 		name                   string
 		enableSessionEncrypted bool
@@ -86,7 +87,7 @@ func TestManagers(t *testing.T) {
 			require.NoError(t, registries["memory"].ClientManager().CreateClient(context.Background(), &client.Client{OutfacingID: "foobar"})) // this is a workaround because the client is not being created for memory store by test helpers.
 
 			for k, store := range registries {
-				store.Config().MustSet(config.KeyEncryptSessionData, tc.enableSessionEncrypted)
+				store.Config(ctx).MustSet(config.KeyEncryptSessionData, tc.enableSessionEncrypted)
 				TestHelperRunner(t, store, k)
 			}
 		})

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/gobuffalo/pop/v6"
+	"github.com/gofrs/uuid"
 
 	"github.com/ory/x/errorsx"
 
@@ -11,6 +12,20 @@ import (
 	"github.com/ory/hydra/client"
 	"github.com/ory/x/sqlcon"
 )
+
+// see context_helpers.ContextualizeNetwork
+//func (p *Persister) NetworkID(ctx context.Context) uuid.UUID {
+//	return ctx.Value("nid").(uuid.UUID)
+//	// return p.d.Contextualizer().Network(ctx, p.nid)
+//}
+
+func (p *Persister) NetworkID(ctx context.Context) uuid.UUID {
+	if p.nid == uuid.Nil {
+		panic("NetworkID called before initialized")
+	}
+
+	return p.r.Contextualizer().Network(ctx, p.nid)
+}
 
 func (p *Persister) GetConcreteClient(ctx context.Context, id string) (*client.Client, error) {
 	var cl client.Client
