@@ -135,6 +135,7 @@ func TestManagersNextGen(t *testing.T) {
 		t.Run("database="+k, func(t *testing.T) {
 			t.Parallel()
 			client.TestHelperCreateGetUpdateDeleteClientNext(t, regs[k].Persister(), networks)
+			client.TestHelperCreateGetUpdateDeleteClientNextNext(t, regs[k].Persister(), networks)
 		})
 	}
 }

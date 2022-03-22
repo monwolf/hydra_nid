@@ -24,6 +24,7 @@ import (
 	"context"
 	"crypto/x509"
 	"fmt"
+	"math/rand"
 	"testing"
 	"time"
 
@@ -117,6 +118,96 @@ func testHelperUpdateClient(t *testing.T, ctx context.Context, tenant Storage, k
 	assert.Equal(t, "name-new", nc.Name)
 	assert.EqualValues(t, []string{"http://redirect/new"}, nc.GetRedirectURIs())
 	assert.Zero(t, len(nc.Contacts))
+}
+
+func TestHelperCreateGetUpdateDeleteClientNextNext(t *testing.T, m Storage, networks []uuid.UUID) {
+	ctx := context.Background()
+
+	type instruction struct {
+		opcode  string
+		network uuid.UUID
+	}
+
+	programs := make(map[uuid.UUID][]string)
+	networkIterators := make(map[uuid.UUID]int)
+	networkOrder := make([]uuid.UUID, 0)
+	for _, network := range networks {
+		programs[network] = []string{"does-not-exist", "exists", "double-create", "get", "update", "cross-get", "delete", "double-delete"}
+		networkIterators[network] = len(programs[network])
+		for i := 0; i < networkIterators[network]; i++ {
+			networkOrder = append(networkOrder, network)
+		}
+	}
+	rand.Shuffle(len(networkOrder), func(i, j int) { networkOrder[i], networkOrder[j] = networkOrder[j], networkOrder[i] })
+	var executionPlan []instruction
+	for _, randomNetwork := range networkOrder {
+		head, tail := programs[randomNetwork][0], programs[randomNetwork][1:]
+		programs[randomNetwork] = tail
+		executionPlan = append(executionPlan, instruction{opcode: head, network: randomNetwork})
+	}
+
+	ctxs := make(map[uuid.UUID]context.Context)
+	clients := make(map[uuid.UUID]*Client)
+	for _, network := range networks {
+		ctxs[network] = contextx.SetNIDContext(ctx, network)
+		clients[network] = &Client{}
+		require.NoError(t, faker.FakeData(clients[network]))
+	}
+
+	t.Log("Running execution plan:", executionPlan)
+	for i, instruction := range executionPlan {
+		ctx := ctxs[instruction.network]
+		switch instruction.opcode {
+		case "does-not-exist":
+			_, err := m.GetClient(ctx, "1234")
+			require.Error(t, err, fmt.Sprintf("Failed at instruction [%d] %s %s", i, instruction.network, instruction.opcode))
+		case "exists":
+			require.NoError(t, m.CreateClient(ctx, clients[instruction.network]), fmt.Sprintf("Failed at instruction [%d] %s %s", i, instruction.network, instruction.opcode))
+			c, err := m.GetClient(ctx, clients[instruction.network].GetID())
+			require.NoError(t, err)
+			assertx.EqualAsJSONExcept(t, clients[instruction.network], c, []string{
+				"registration_access_token",
+				"registration_client_uri",
+			})
+
+			n, err := m.CountClients(ctx)
+			assert.NoError(t, err)
+			assert.Equal(t, 1, n)
+		case "double-create":
+			require.Error(t, m.CreateClient(ctx, clients[instruction.network]), fmt.Sprintf("Failed at instruction [%d] %s %s", i, instruction.network, instruction.opcode))
+		case "update":
+			clients[instruction.network].Name = "updated" + instruction.network.String()
+			require.NoError(t, m.UpdateClient(ctx, clients[instruction.network]))
+			c, err := m.GetClient(ctx, clients[instruction.network].GetID())
+			require.NoError(t, err)
+			assertx.EqualAsJSONExcept(t, clients[instruction.network], c, []string{
+				"registration_access_token",
+				"registration_client_uri",
+			})
+		case "cross-get":
+			for _, network := range networks {
+				c, err := m.GetClient(ctx, clients[network].GetID())
+				if network != instruction.network {
+					require.ErrorIs(t, err, sqlcon.ErrNoRows, fmt.Sprintf("Failed at instruction [%d] %s %s", i, instruction.network, instruction.opcode))
+				} else {
+					require.Equal(t, "updated"+instruction.network.String(), c.(*Client).Name)
+				}
+			}
+		case "delete":
+			assert.NoError(t, m.DeleteClient(ctx, clients[instruction.network].GetID()), fmt.Sprintf("Failed at instruction [%d] %s %s", i, instruction.network, instruction.opcode))
+
+			_, err := m.GetClient(ctx, clients[instruction.network].GetID())
+			assert.ErrorIs(t, err, sqlcon.ErrNoRows)
+
+			n, err := m.CountClients(ctx)
+			assert.NoError(t, err)
+			assert.Equal(t, 0, n)
+			assert.Error(t, m.DeleteClient(ctx, clients[instruction.network].GetID()))
+
+		case "double-delete":
+			require.Error(t, m.DeleteClient(ctx, clients[instruction.network].GetID()), fmt.Sprintf("Failed at instruction [%d] %s %s", i, instruction.network, instruction.opcode))
+		}
+	}
 }
 
 func TestHelperCreateGetUpdateDeleteClientNext(t *testing.T, m Storage, networks []uuid.UUID) {
