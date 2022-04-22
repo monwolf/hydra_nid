@@ -376,8 +376,9 @@ func (p *Persister) flushInactiveTokens(ctx context.Context, notAfter time.Time,
 
 	var err error
 
-	flushedRecords := 0
-	for deletedRecords := batchSize; flushedRecords < limit && deletedRecords == batchSize; {
+	totalDeletedCount := 0
+	deletedRecords := batchSize
+	for totalDeletedCount < limit && deletedRecords == batchSize {
 		// Delete in batches
 		deletedRecords, err = p.Connection(ctx).RawQuery(
 			fmt.Sprintf(`DELETE FROM %s WHERE signature in (
@@ -385,14 +386,14 @@ func (p *Persister) flushInactiveTokens(ctx context.Context, notAfter time.Time,
 			)`, OAuth2RequestSQL{Table: sqlTableAccess}.TableName(), OAuth2RequestSQL{Table: sqlTableAccess}.TableName(), batchSize),
 			notAfter,
 		).ExecWithCount()
-		flushedRecords += deletedRecords
+		totalDeletedCount += deletedRecords
 
 		if err != nil {
 			break
 		}
-		p.l.Debugf("Flushing tokens...: %d/%d", flushedRecords, limit)
+		p.l.Debugf("Flushing tokens...: %d/%d", totalDeletedCount, limit)
 	}
-	p.l.Debugf("Flush Refresh Tokens flushed_records: %d", flushedRecords)
+	p.l.Debugf("Flush Refresh Tokens flushed_records: %d", totalDeletedCount)
 	if err == sql.ErrNoRows {
 		return errors.Wrap(fosite.ErrNotFound, "")
 	}
