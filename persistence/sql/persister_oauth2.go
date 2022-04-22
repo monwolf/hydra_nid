@@ -369,32 +369,27 @@ func (p *Persister) FlushInactiveAccessTokens(ctx context.Context, notAfter time
 		notAfter = requestMaxExpire
 	}
 
-	signatures := []string{}
-
-	// Select tokens' signatures with limit
-	q := p.Connection(ctx).RawQuery(
-		fmt.Sprintf("SELECT signature FROM %s WHERE requested_at < ? ORDER BY signature LIMIT %d",
-			OAuth2RequestSQL{Table: sqlTableAccess}.TableName(), limit),
-		notAfter,
-	)
-	if err := q.All(&signatures); err == sql.ErrNoRows {
-		return errors.Wrap(fosite.ErrNotFound, "")
-	}
-
-	// Delete tokens in batch
 	var err error
-	for i := 0; i < len(signatures); i += batchSize {
-		j := i + batchSize
-		if j > len(signatures) {
-			j = len(signatures)
-		}
+	signature_len := batchSize
+	flushed_records := 0
+	for flushed_records < limit && signature_len == batchSize {
+		// Delete in batches
+		signature_len, err = p.Connection(ctx).RawQuery(
+			fmt.Sprintf(`DELETE FROM %s WHERE signature in (
+				SELECT signature FROM (SELECT signature FROM %s hoa WHERE requested_at < ? ORDER BY signature LIMIT %d) as s
+			)`, OAuth2RequestSQL{Table: sqlTableAccess}.TableName(), OAuth2RequestSQL{Table: sqlTableAccess}.TableName(), batchSize),
+			notAfter,
+		).ExecWithCount()
 
-		if i != j {
-			err = p.Connection(ctx).RawQuery(
-				fmt.Sprintf("DELETE FROM %s WHERE signature in (?)", OAuth2RequestSQL{Table: sqlTableAccess}.TableName()),
-				signatures[i:j],
-			).Exec()
+		flushed_records += signature_len
+		if err != nil {
+			break
 		}
+		p.l.Debugf("Flushing tokens...: %d/%d", flushed_records, limit)
+	}
+	p.l.Debugf("Flush Access Tokens flushed_records: %d", flushed_records)
+	if err == sql.ErrNoRows {
+		return errors.Wrap(fosite.ErrNotFound, "")
 	}
 	return sqlcon.HandleError(err)
 }
@@ -407,32 +402,27 @@ func (p *Persister) FlushInactiveRefreshTokens(ctx context.Context, notAfter tim
 		notAfter = requestMaxExpire
 	}
 
-	signatures := []string{}
-
-	// Select tokens' signatures with limit
-	q := p.Connection(ctx).RawQuery(
-		fmt.Sprintf("SELECT signature FROM %s WHERE requested_at < ? ORDER BY signature LIMIT %d",
-			OAuth2RequestSQL{Table: sqlTableRefresh}.TableName(), limit),
-		notAfter,
-	)
-	if err := q.All(&signatures); err == sql.ErrNoRows {
-		return errors.Wrap(fosite.ErrNotFound, "")
-	}
-
-	// Delete tokens in batch
 	var err error
-	for i := 0; i < len(signatures); i += batchSize {
-		j := i + batchSize
-		if j > len(signatures) {
-			j = len(signatures)
-		}
+	signature_len := batchSize
+	flushed_records := 0
+	for flushed_records < limit && signature_len == batchSize {
+		// Delete in batches
+		signature_len, err = p.Connection(ctx).RawQuery(
+			fmt.Sprintf(`DELETE FROM %s WHERE signature in (
+				SELECT signature FROM (SELECT signature FROM %s hoa  WHERE requested_at < ? ORDER BY signature LIMIT %d)  as s
+			)`, OAuth2RequestSQL{Table: sqlTableAccess}.TableName(), OAuth2RequestSQL{Table: sqlTableAccess}.TableName(), batchSize),
+			notAfter,
+		).ExecWithCount()
+		flushed_records += signature_len
 
-		if i != j {
-			err = p.Connection(ctx).RawQuery(
-				fmt.Sprintf("DELETE FROM %s WHERE signature in (?)", OAuth2RequestSQL{Table: sqlTableRefresh}.TableName()),
-				signatures[i:j],
-			).Exec()
+		if err != nil {
+			break
 		}
+		p.l.Debugf("Flushing tokens...: %d/%d", flushed_records, limit)
+	}
+	p.l.Debugf("Flush Refresh Tokens flushed_records: %d", flushed_records)
+	if err == sql.ErrNoRows {
+		return errors.Wrap(fosite.ErrNotFound, "")
 	}
 	return sqlcon.HandleError(err)
 }
