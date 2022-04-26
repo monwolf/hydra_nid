@@ -387,7 +387,7 @@ func (p *Persister) flushInactiveTokens(ctx context.Context, notAfter time.Time,
 		deletedRecords, err = p.Connection(ctx).RawQuery(
 			fmt.Sprintf(`DELETE FROM %s WHERE signature in (
 				SELECT signature FROM (SELECT signature FROM %s hoa WHERE requested_at < ? ORDER BY signature LIMIT %d)  as s
-			)`, OAuth2RequestSQL{Table: sqlTableAccess}.TableName(), OAuth2RequestSQL{Table: sqlTableAccess}.TableName(), d),
+			)`, OAuth2RequestSQL{Table: table}.TableName(), OAuth2RequestSQL{Table: table}.TableName(), d),
 			notAfter,
 		).ExecWithCount()
 		totalDeletedCount += deletedRecords
