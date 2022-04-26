@@ -377,8 +377,7 @@ func (p *Persister) flushInactiveTokens(ctx context.Context, notAfter time.Time,
 	var err error
 
 	totalDeletedCount := 0
-	deletedRecords := batchSize
-	for totalDeletedCount < limit && deletedRecords == batchSize {
+	for deletedRecords := batchSize; totalDeletedCount < limit && deletedRecords == batchSize; {
 		d := batchSize
 		if limit-totalDeletedCount < batchSize {
 			d = limit - totalDeletedCount
@@ -386,9 +385,10 @@ func (p *Persister) flushInactiveTokens(ctx context.Context, notAfter time.Time,
 		// Delete in batches
 		deletedRecords, err = p.Connection(ctx).RawQuery(
 			fmt.Sprintf(`DELETE FROM %s WHERE signature in (
-				SELECT signature FROM (SELECT signature FROM %s hoa WHERE requested_at < ? ORDER BY signature LIMIT %d)  as s
+				SELECT signature FROM (SELECT signature FROM %s hoa WHERE requested_at < ? and nid = ? ORDER BY signature LIMIT %d )  as s
 			)`, OAuth2RequestSQL{Table: table}.TableName(), OAuth2RequestSQL{Table: table}.TableName(), d),
 			notAfter,
+			p.NetworkID(ctx),
 		).ExecWithCount()
 		totalDeletedCount += deletedRecords
 
